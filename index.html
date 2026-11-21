@@ -1,0 +1,776 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Meeting Copilot — London</title>
+<script>window.coi={coepDegrade:false,quiet:true};</script>
+<script src="coi-serviceworker.js"></script>
+<style>
+  :root{
+    --bg:#0C0D11; --panel:#15171E; --panel2:#1C1F28; --line:#2A2E3A;
+    --ink:#F4F5F7; --mut:#9AA0AD; --dim:#6C7280;
+    --red:#FF2A3B; --redsoft:rgba(255,42,59,.14);
+    --ok:#36D07A; --warn:#FFB020; --accent:#4C8DFF;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased;overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100%}
+
+  /* top bar */
+  #bar{display:flex;align-items:center;gap:14px;padding:9px 16px;background:var(--panel);
+    border-bottom:1px solid var(--line);flex:0 0 auto;min-height:48px}
+  .dot{width:10px;height:10px;border-radius:50%;background:var(--dim);flex:0 0 auto;transition:.2s}
+  .dot.live{background:var(--ok);box-shadow:0 0 0 4px rgba(54,208,122,.18);animation:pulse 1.4s infinite}
+  .dot.load{background:var(--warn)}
+  .dot.err{background:var(--red)}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:.45}}
+  #status{font-size:13px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:40vw}
+  .spacer{flex:1}
+  .modes{display:flex;gap:4px;background:var(--panel2);padding:3px;border-radius:10px}
+  .modes button{appearance:none;border:0;background:transparent;color:var(--mut);font-size:12.5px;font-weight:650;
+    padding:7px 12px;border-radius:8px;cursor:pointer}
+  .modes button.on{background:var(--red);color:#fff}
+  .iconbtn{appearance:none;border:1px solid var(--line);background:var(--panel2);color:var(--ink);
+    font-size:13px;font-weight:600;padding:7px 11px;border-radius:9px;cursor:pointer}
+  .iconbtn:active{transform:translateY(1px)}
+
+  /* live glance area */
+  #live{flex:1;overflow:auto;padding:16px 18px 10px;display:flex;flex-direction:column;gap:12px}
+
+  .lbl{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:750}
+  #livepanel{display:grid;grid-template-columns:1fr 1fr;gap:12px;flex:0 0 auto}
+  .lcol{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:13px 16px;min-height:72px;display:flex;flex-direction:column}
+  .lcol.frcol{background:linear-gradient(180deg,rgba(76,141,255,.07),rgba(76,141,255,.01));border-color:#2c3650}
+  .lhd{font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--dim);font-weight:800;margin-bottom:8px;display:flex;align-items:center;gap:8px}
+  .lflag{font-size:10.5px;font-weight:800;border-radius:5px;padding:1px 7px;letter-spacing:.02em}
+  .lflag.en{color:#fff;background:#2a2e3a}
+  .lflag.fr{color:var(--accent);border:1px solid var(--accent)}
+  #qtext{font-size:21px;line-height:1.42;color:#fff;min-height:30px;font-weight:450}
+  #qlivefr{font-size:21px;line-height:1.42;color:#CFE0FF;min-height:30px;font-weight:450}
+  .cur{color:var(--dim)}
+  @media(max-width:720px){#livepanel{grid-template-columns:1fr}}
+
+  #abox{background:linear-gradient(180deg,#1A1D26,#141620);border:1.5px solid #30364a;border-radius:16px;
+    padding:16px 18px;flex:0 0 auto;position:relative;box-shadow:0 10px 40px rgba(0,0,0,.35)}
+  #abox.pinned{border-color:var(--red)}
+  #amatch{display:flex;align-items:center;gap:10px;margin-bottom:8px;flex-wrap:wrap}
+  .cat{font-size:10.5px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+    color:var(--red);background:var(--redsoft);padding:3px 9px;border-radius:999px}
+  .mq{font-size:13px;color:var(--mut);font-style:italic}
+  #qtrans{font-size:14.5px;color:var(--mut);margin:-2px 0 11px;display:none}
+  #qtrans.show{display:block}
+  .flag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.04em;color:var(--accent);
+    border:1px solid var(--accent);border-radius:5px;padding:0 5px;margin-right:7px;vertical-align:1px}
+  #atext{font-size:27px;line-height:1.34;font-weight:600;letter-spacing:-.01em;color:#fff}
+  #atext2{margin-top:13px;padding-top:12px;border-top:1px solid var(--line);font-size:16.5px;line-height:1.42;color:var(--mut);display:none}
+  #atext2.show{display:block}
+  #anote{margin-top:12px;font-size:14.5px;line-height:1.45;color:var(--warn);
+    border-left:3px solid var(--warn);padding-left:11px;display:none}
+  #anote.show{display:block}
+  #pinhint{position:absolute;top:12px;right:14px;font-size:11px;color:var(--dim)}
+
+  .alabel{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--dim);font-weight:750;margin:2px 2px -4px}
+  #alts{display:flex;flex-direction:column;gap:8px;flex:0 0 auto;padding-bottom:6px}
+  .alt{display:flex;gap:11px;align-items:flex-start;background:var(--panel);border:1px solid var(--line);
+    border-radius:12px;padding:11px 13px;cursor:pointer;transition:.12s}
+  .alt:hover{border-color:#3b4256;background:var(--panel2)}
+  .altn{flex:0 0 22px;height:22px;border-radius:7px;background:var(--panel2);border:1px solid var(--line);
+    color:var(--mut);font-size:12px;font-weight:800;display:flex;align-items:center;justify-content:center;margin-top:2px}
+  .altbody{flex:1;min-width:0}
+  .altq{font-size:12.5px;color:var(--mut);font-style:italic;margin-bottom:2px}
+  .alta{font-size:15px;line-height:1.38;color:#E7E9EE}
+
+  .empty{color:var(--dim);font-size:15px;text-align:center;padding:30px 10px}
+
+  /* type row */
+  #typerow{flex:0 0 auto;padding:10px 16px;background:var(--panel);border-top:1px solid var(--line);display:none}
+  #typerow.show{display:block}
+  #type{width:100%;background:var(--panel2);border:1px solid var(--line);border-radius:11px;color:var(--ink);
+    font-size:16px;padding:12px 14px;outline:none}
+  #type:focus{border-color:var(--red)}
+
+  /* start overlay (auto) */
+  #start{position:absolute;inset:0;background:rgba(10,11,15,.82);backdrop-filter:blur(3px);
+    display:none;align-items:center;justify-content:center;z-index:30}
+  #start.show{display:flex}
+  .startcard{background:var(--panel);border:1px solid var(--line);border-radius:18px;padding:26px;max-width:440px;text-align:center}
+  .startcard h2{margin:0 0 8px;font-size:20px}
+  .startcard p{margin:0 0 18px;color:var(--mut);font-size:14px;line-height:1.5}
+  .bigbtn{appearance:none;border:0;border-radius:12px;background:var(--red);color:#fff;font-size:16px;
+    font-weight:750;padding:14px 22px;cursor:pointer;width:100%}
+  .bigbtn.sec{background:var(--panel2);color:var(--ink);border:1px solid var(--line);margin-top:9px;font-size:14px;padding:11px}
+
+  /* settings */
+  #settings{position:absolute;top:56px;right:14px;width:320px;background:var(--panel);border:1px solid var(--line);
+    border-radius:14px;padding:16px;z-index:40;display:none;box-shadow:0 20px 60px rgba(0,0,0,.5)}
+  #settings.show{display:block}
+  #settings h3{margin:0 0 12px;font-size:14px}
+  #settings label{display:block;font-size:12px;color:var(--mut);margin:11px 0 5px}
+  #settings input,#settings select{width:100%;background:var(--panel2);border:1px solid var(--line);
+    border-radius:9px;color:var(--ink);font-size:13px;padding:9px 11px;outline:none}
+  #settings .hint{font-size:11.5px;color:var(--dim);line-height:1.45;margin-top:6px}
+  .kbd{font-family:ui-monospace,monospace;font-size:11px;background:var(--panel2);border:1px solid var(--line);
+    border-radius:5px;padding:1px 6px;color:var(--mut)}
+  .foothelp{padding:7px 16px;background:var(--panel);border-top:1px solid var(--line);font-size:11.5px;color:var(--dim);
+    display:flex;gap:14px;flex-wrap:wrap;flex:0 0 auto}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="bar">
+    <span class="dot" id="dot"></span>
+    <span id="status">Prêt — choisis un mode</span>
+    <span class="spacer"></span>
+    <div class="modes" id="modes">
+      <button data-mode="auto" class="on">Auto-écoute</button>
+      <button data-mode="voice">Voix</button>
+      <button data-mode="type">Clavier</button>
+    </div>
+    <button class="iconbtn" id="pinbtn" title="Figer (P)">Figer</button>
+    <button class="iconbtn" id="gear" title="Réglages">⚙</button>
+  </div>
+
+  <div id="live">
+    <div id="livepanel">
+      <div class="lcol">
+        <div class="lhd"><span class="lflag en">EN</span> En direct — ce qu'ils disent</div>
+        <div id="qtext"><span class="cur">en attente…</span></div>
+      </div>
+      <div class="lcol frcol">
+        <div class="lhd"><span class="lflag fr">FR</span> Traduction française</div>
+        <div id="qlivefr"><span class="cur">en attente…</span></div>
+      </div>
+    </div>
+    <div id="abox">
+      <div id="pinhint"></div>
+      <div id="amatch"></div>
+      <div id="qtrans"></div>
+      <div id="atext" class="empty">La réponse la plus proche s'affichera ici, en grand.</div>
+      <div id="atext2"></div>
+      <div id="anote"></div>
+    </div>
+    <div class="alabel">Autres réponses possibles</div>
+    <div id="alts"></div>
+  </div>
+
+  <div id="typerow">
+    <input id="type" placeholder="Tape 2-3 mots-clés de la question…" autocomplete="off">
+  </div>
+
+  <div class="foothelp">
+    <span><span class="kbd">1</span> <span class="kbd">2</span> <span class="kbd">3</span> choisir une alternative</span>
+    <span><span class="kbd">P</span> figer / libérer</span>
+    <span><span class="kbd">/</span> taper une question</span>
+    <span><span class="kbd">Échap</span> libérer</span>
+  </div>
+
+  <div id="start">
+    <div class="startcard">
+      <h2>Démarrer l'écoute</h2>
+      <p id="startMsg">Chrome va demander un partage. Choisis <b>« Onglet » ou « Tout l'écran »</b> et <b>active « Partager l'audio »</b>. Le Copilote écoutera la réunion et fera remonter les réponses tout seul.</p>
+      <button class="bigbtn" id="startBtn">Partager l'audio et écouter</button>
+      <button class="bigbtn sec" id="skipBtn">Passer en mode Voix / Clavier</button>
+    </div>
+  </div>
+
+  <div id="settings">
+    <h3>Réglages</h3>
+    <label>Modèle Whisper</label>
+    <select id="setModel">
+      <option value="Xenova/whisper-tiny">tiny — multilingue FR+EN, le plus rapide</option>
+      <option value="Xenova/whisper-base">base — multilingue, plus précis, plus lent</option>
+    </select>
+    <label>Source du modèle</label>
+    <input id="setHost" value="https://raw.githubusercontent.com/allouchedavy-13/whisper-model/main/" placeholder="https://raw.githubusercontent.com/UTILISATEUR/REPO/main/">
+    <div class="hint">Déjà rempli avec ton dépôt GitHub (raw.github). Le modèle se charge de là. Normalement rien à toucher. Voix et Clavier marchent sans modèle.</div>
+    <label>Fenêtre audio (secondes)</label>
+    <input id="setChunk" type="number" value="4" min="2" max="15">
+    <div class="hint">Durée de son analysée à chaque passe. Plus court = plus réactif, plus long = plus précis.</div>
+  </div>
+</div>
+
+<script>// Base de connaissances Londres — bilingue
+// c=catégorie, q=question EN, qf=question FR, a=réponse EN, af=réponse FR, n=note privée
+window.KB = [
+
+/* ================= BUSINESS ================= */
+{c:"Business",q:"What is it, in one sentence?",qf:"C'est quoi, en une phrase ?",a:"A bespoke tool for the credit-insurance desk — BI, renewals, insurer arbitrage and client reporting — that runs in Chrome, costs nothing, and keeps all the data inside Aon.",af:"Un outil sur-mesure pour le desk assurance-crédit — BI, renouvellements, arbitrage assureurs et reporting client — qui tourne dans Chrome, ne coûte rien, et garde toutes les données chez Aon.",n:""},
+{c:"Business",q:"What problem does it solve?",qf:"Quel problème ça résout ?",a:"Brokers juggle insurer files, spreadsheets and manual reporting. This brings it into one place, automates the reporting, and gives analytics that usually need a BI team.",af:"Les courtiers jonglent entre fichiers assureurs, tableurs et reporting manuel. Ça rassemble tout au même endroit, automatise le reporting, et donne une analyse qui demande d'habitude une équipe BI.",n:""},
+{c:"Business",q:"What is the business case? What is the ROI?",qf:"Quel est l'intérêt business ? Le ROI ?",a:"Time saved on reporting, fewer manual errors, analytics with no BI team, and zero licence or server cost. It pays back from day one because it runs on what Aon already has.",af:"Du temps gagné sur le reporting, moins d'erreurs, de l'analyse sans équipe BI, et zéro coût de licence ou de serveur. C'est rentable dès le premier jour car ça tourne sur l'existant Aon.",n:""},
+{c:"Business",q:"How is this different from what brokers do today?",qf:"En quoi c'est différent de ce que font les courtiers aujourd'hui ?",a:"Today it is manual and scattered. This centralises the desk, automates the client reporting, and turns data into decisions — proactively, not after the fact.",af:"Aujourd'hui c'est manuel et éparpillé. Là on centralise le desk, on automatise le reporting client, et on transforme la donnée en décisions — de façon proactive, pas après coup.",n:""},
+{c:"Business",q:"Who uses it, day to day?",qf:"Qui l'utilise, au quotidien ?",a:"The broker, every day. A manager sees the whole team through a manager view. And the client uses the Credit Platform version.",af:"Le courtier, tous les jours. Un responsable voit toute l'équipe via la vue responsable. Et le client utilise la version Credit Platform.",n:""},
+{c:"Business",q:"How does it help win or keep clients?",qf:"Comment ça aide à gagner ou garder des clients ?",a:"Faster, sharper, client-ready reporting, and proactive follow-up on coverage and renewals. The broker looks ahead instead of chasing paperwork.",af:"Un reporting client plus rapide et plus net, et un suivi proactif des couvertures et renouvellements. Le courtier anticipe au lieu de courir après la paperasse.",n:""},
+{c:"Business",q:"Is this a product or an internal tool?",qf:"C'est un produit ou un outil interne ?",a:"An internal tool, built for the Aon credit desk. Not sold, not hosted outside — it lives inside Aon.",af:"Un outil interne, construit pour le desk crédit d'Aon. Ni vendu, ni hébergé dehors — il vit chez Aon.",n:""},
+{c:"Business",q:"What makes it credit-insurance specific?",qf:"Qu'est-ce qui le rend spécifique à l'assurance-crédit ?",a:"Multi-insurer, multi-currency, coverage and acceptance logic, arbitrage, renewals and buyer-level drill-down — all the desk's real workflow, in one place.",af:"Multi-assureurs, multi-devises, logique de couverture et d'acceptation, arbitrage, renouvellements et descente jusqu'à l'acheteur — tout le vrai workflow du desk, au même endroit.",n:""},
+{c:"Business",q:"What is the vision in two or three years?",qf:"Quelle est la vision à deux ou trois ans ?",a:"A controlled, bespoke platform for the credit desk — pilot in France first, then a studied wider rollout, kept purpose-built and owned by Aon.",af:"Une plateforme sur-mesure et maîtrisée pour le desk crédit — pilote en France d'abord, puis un déploiement élargi étudié, qui reste sur-mesure et propriété d'Aon.",n:""},
+{c:"Business",q:"Could this become a group standard?",qf:"Est-ce que ça pourrait devenir un standard groupe ?",a:"It could, if the group wants it. I would keep it bespoke and controlled rather than forcing it everywhere at once.",af:"Ça pourrait, si le groupe le veut. Je le garderais sur-mesure et maîtrisé plutôt que de l'imposer partout d'un coup.",n:"↳ Rester humble : d'abord le pilote, le prouver, puis étendre."},
+{c:"Business",q:"What is the risk if we do nothing?",qf:"Quel est le risque si on ne fait rien ?",a:"The desk stays manual and reporting stays slow, while the data that could drive decisions sits unused. This is a low-cost way to move now.",af:"Le desk reste manuel et le reporting lent, pendant que la donnée qui pourrait guider les décisions dort. C'est une façon peu coûteuse d'avancer dès maintenant.",n:""},
+{c:"Business",q:"Why build it instead of buying a tool?",qf:"Pourquoi le construire plutôt qu'acheter un outil ?",a:"Off-the-shelf tools are excellent, but none goes bespoke enough for credit insurance — multi-currency, multi-insurer, evolving monthly, in French and English. So I built exactly what the desk needs.",af:"Les outils du marché sont excellents, mais aucun ne va assez loin dans le sur-mesure pour l'assurance-crédit — multi-devises, multi-assureurs, qui évolue chaque mois, en français et en anglais. J'ai donc construit exactement ce dont le desk a besoin.",n:""},
+{c:"Business",q:"Why you, and not Aon IT?",qf:"Pourquoi vous, et pas l'IT d'Aon ?",a:"I run the desk, so I know the need. I designed it, wrote the specs, and built it with an AI coding assistant. It needs no server, so it did not need an IT project to exist.",af:"Je gère le desk, donc je connais le besoin. Je l'ai conçu, j'ai écrit les specs, et je l'ai construit avec un assistant de code IA. Il n'a besoin d'aucun serveur, donc il n'a pas eu besoin d'un projet IT pour exister.",n:""},
+{c:"Business",q:"How long did it take?",qf:"Ça a pris combien de temps ?",a:"Months of work, intensified over the last few weeks. The same method produced five tools this year.",af:"Des mois de travail, intensifiés ces dernières semaines. La même méthode a produit cinq outils cette année.",n:""},
+{c:"Business",q:"Is this just for you, or the whole team?",qf:"C'est juste pour vous, ou pour toute l'équipe ?",a:"Built for every broker — each gets their own file, and the manager view consolidates the team.",af:"Construit pour chaque courtier — chacun a son propre fichier, et la vue responsable consolide l'équipe.",n:""},
+
+/* ================= BI ================= */
+{c:"BI",q:"How many charts are there?",qf:"Il y a combien de graphiques ?",a:"Eleven dashboards and one hundred and fourteen charts. But that is not the right measure — it is a chart engine, not a fixed catalogue.",af:"Onze tableaux de bord et cent quatorze graphiques. Mais ce n'est pas la bonne mesure — c'est un moteur de graphiques, pas un catalogue figé.",n:""},
+{c:"BI",q:"Can a user build their own views?",qf:"Un utilisateur peut créer ses propres vues ?",a:"Yes. Click any bar and the whole page filters to it. Combine seven filters, reshape any chart, and drill from the group to a single buyer. The views you can compose run into the thousands.",af:"Oui. Clique sur une barre et toute la page se filtre dessus. Combine sept filtres, reconfigure n'importe quel graphique, et descends du groupe jusqu'à un seul acheteur. Les vues composables se comptent en milliers.",n:""},
+{c:"BI",q:"Is the BI a licensed product?",qf:"La BI est un produit sous licence ?",a:"No. There is no BI licence and no BI vendor. Every chart is built from code, by hand, for credit insurance. Nothing to pay, and nothing behind the visuals.",af:"Non. Aucune licence BI, aucun éditeur BI. Chaque graphique est construit en code, à la main, pour l'assurance-crédit. Rien à payer, et rien derrière les visuels.",n:"↳ Insister — l'IT et les gens BI veulent l'entendre clairement."},
+{c:"BI",q:"How is this better than a Power BI dashboard?",qf:"En quoi c'est mieux qu'un dashboard Power BI ?",a:"Power BI is excellent for general BI. This is purpose-built for the credit desk, at zero cost, the data never leaves the device, and it acts — renewals, commissions, reporting — not just shows.",af:"Power BI est excellent pour la BI générale. Là c'est taillé pour le desk crédit, à coût zéro, la donnée ne quitte jamais le poste, et ça agit — renouvellements, commissions, reporting — ça ne fait pas qu'afficher.",n:"↳ Ne jamais dénigrer Power BI ; positionner comme complémentaire et spécialisé."},
+{c:"BI",q:"Does it replace Power BI?",qf:"Ça remplace Power BI ?",a:"No need to frame it that way. They can coexist. This is the specialised, zero-cost, data-stays-in layer for the credit desk specifically.",af:"Pas besoin de le poser comme ça. Les deux coexistent. C'est la couche spécialisée, à coût zéro, où la donnée reste, pour le desk crédit précisément.",n:""},
+{c:"BI",q:"Who designed the charts?",qf:"Qui a conçu les graphiques ?",a:"I did, from code, by hand — each chart chosen for how a credit-insurance decision is actually read. It follows a real data-visualisation method.",af:"Moi, en code, à la main — chaque graphique choisi selon la façon dont se lit vraiment une décision d'assurance-crédit. Ça suit une vraie méthode de dataviz.",n:""},
+{c:"BI",q:"Can you compare insurers on one screen?",qf:"On peut comparer les assureurs sur un écran ?",a:"Yes — insurers side by side, with coverage, acceptance, response time and decisions compared directly.",af:"Oui — les assureurs côte à côte, avec couverture, acceptation, délai de réponse et décisions comparés directement.",n:""},
+{c:"BI",q:"Can I see coverage and acceptance rates?",qf:"On voit les taux de couverture et d'acceptation ?",a:"Yes — coverage and acceptance by insurer, by period, with the evolution over time.",af:"Oui — couverture et acceptation par assureur, par période, avec l'évolution dans le temps.",n:""},
+{c:"BI",q:"Can it show how insurer decisions evolve?",qf:"Ça montre l'évolution des décisions des assureurs ?",a:"Yes — there is a view dedicated to the evolution of insurer decisions over time.",af:"Oui — il y a une vue dédiée à l'évolution des décisions des assureurs dans le temps.",n:""},
+{c:"BI",q:"Is it multi-currency?",qf:"C'est multi-devises ?",a:"Yes — the original currency and amount are kept, with a euro valuation at the day's rate.",af:"Oui — la devise et le montant d'origine sont conservés, avec une valorisation en euros au taux du jour.",n:""},
+{c:"BI",q:"Is it multi-insurer?",qf:"C'est multi-assureurs ?",a:"Yes — several insurers compared side by side across every metric.",af:"Oui — plusieurs assureurs comparés côte à côte sur chaque indicateur.",n:""},
+{c:"BI",q:"Can I filter by buyer, country or currency?",qf:"On peut filtrer par acheteur, pays ou devise ?",a:"Yes — seven cross-filters, and you can drill from group to client to policy to a single buyer.",af:"Oui — sept filtres croisés, et on descend du groupe au client, à la police, jusqu'à un seul acheteur.",n:""},
+{c:"BI",q:"Can it export a chart to a client deck?",qf:"On peut exporter un graphique vers une présentation client ?",a:"Yes — any view becomes a reporting in one click, to PowerPoint, PDF or Excel, with identical figures.",af:"Oui — n'importe quelle vue devient un reporting en un clic, en PowerPoint, PDF ou Excel, avec des chiffres identiques.",n:""},
+{c:"BI",q:"Is the demo data real?",qf:"Les données de la démo sont réelles ?",a:"No — the demo uses a fictitious example. But everything is fully reproducible with real data.",af:"Non — la démo utilise un exemple fictif. Mais tout est entièrement reproductible avec des données réelles.",n:""},
+{c:"BI",q:"How fast is it on a big portfolio?",qf:"C'est rapide sur un gros portefeuille ?",a:"Designed for big groups — many subsidiaries and policies load group by group, with a loading message, so it stays responsive.",af:"Conçu pour les grands groupes — beaucoup de filiales et de polices se chargent groupe par groupe, avec un message de chargement, pour rester réactif.",n:""},
+{c:"BI",q:"Can clients get their own dashboard?",qf:"Les clients peuvent avoir leur propre dashboard ?",a:"Yes — the Credit Platform version gives the insured client their own view, with internal comments stripped out.",af:"Oui — la version Credit Platform donne au client assuré sa propre vue, sans les commentaires internes.",n:""},
+
+/* ================= FUNCTIONAL ================= */
+{c:"Functional",q:"What does it cover beyond BI?",qf:"Ça couvre quoi au-delà de la BI ?",a:"Renewals, commissions, proactive insistences, opportunities, the agenda and actions, public-registry watch, and automatic bespoke reporting.",af:"Renouvellements, commissions, relances proactives, opportunités, agenda et actions, veille des registres publics, et reporting sur-mesure automatique.",n:""},
+{c:"Functional",q:"How do renewals work?",qf:"Comment marchent les renouvellements ?",a:"Each client has its own renewal calendar — flagged, notice, negotiation, arbitrage, signed. Group renewals roll up, and the tool can recommend what to negotiate, benchmarked to the portfolio.",af:"Chaque client a son calendrier de renouvellement — repéré, préavis, négociation, arbitrage, signé. Les renouvellements de groupe se consolident, et l'outil peut recommander quoi négocier, étalonné au portefeuille.",n:""},
+{c:"Functional",q:"What is an insistence, or proactive follow-up?",qf:"C'est quoi une relance, un suivi proactif ?",a:"A tracked push on an insurer — a cover request to chase or re-argue. The tool flags them and keeps the history so nothing is dropped.",af:"Une relance tracée auprès d'un assureur — une demande de couverture à relancer ou réargumenter. L'outil les signale et garde l'historique pour ne rien laisser tomber.",n:""},
+{c:"Functional",q:"How does insurer arbitrage work?",qf:"Comment marche l'arbitrage entre assureurs ?",a:"It compares insurers on coverage, acceptance and decision, so the broker places and defends cover with the best insurer, with the evidence on screen.",af:"Il compare les assureurs sur la couverture, l'acceptation et la décision, pour que le courtier place et défende la couverture chez le meilleur assureur, preuves à l'écran.",n:""},
+{c:"Functional",q:"Does it manage commissions?",qf:"Ça gère les commissions ?",a:"Yes — commissions are tracked per file, and on transfer the past commissions stay with the original broker, future ones go to the new one.",af:"Oui — les commissions sont suivies par dossier, et au transfert les commissions passées restent au courtier d'origine, les futures vont au nouveau.",n:""},
+{c:"Functional",q:"Can it track opportunities or pipeline?",qf:"Ça suit les opportunités / le pipeline ?",a:"Yes — opportunities are tracked alongside the live portfolio.",af:"Oui — les opportunités sont suivies à côté du portefeuille en cours.",n:""},
+{c:"Functional",q:"Is there an agenda and task system?",qf:"Il y a un agenda et des tâches ?",a:"Yes — an agenda with actions, so deadlines and follow-ups surface automatically.",af:"Oui — un agenda avec des actions, pour que les échéances et relances remontent automatiquement.",n:""},
+{c:"Functional",q:"Does it watch public registries?",qf:"Ça surveille les registres publics ?",a:"Yes — it watches public legal and financial registries for events on the monitored companies.",af:"Oui — il surveille les registres légaux et financiers publics pour les événements sur les sociétés suivies.",n:"↳ La seule fonction qui a besoin du web."},
+{c:"Functional",q:"How does the manager view work?",qf:"Comment marche la vue responsable ?",a:"A consolidated view of the team that also holds the manager's own portfolio, plus access to each broker's full tool via a selector — and every action is traced to the manager.",af:"Une vue consolidée de l'équipe qui contient aussi le portefeuille du responsable, plus l'accès à l'outil complet de chaque courtier via un sélecteur — et chaque action est tracée au responsable.",n:""},
+{c:"Functional",q:"Can a manager act on behalf of a broker?",qf:"Un responsable peut agir à la place d'un courtier ?",a:"Yes — the manager can read and act inside any broker's tool, and each action is logged under the manager's name.",af:"Oui — le responsable peut lire et agir dans l'outil de n'importe quel courtier, et chaque action est journalisée à son nom.",n:""},
+{c:"Functional",q:"What happens when a file moves between brokers?",qf:"Que se passe-t-il quand un dossier passe d'un courtier à un autre ?",a:"The manager decides the transfer. Past commissions stay with the origin broker, future ones go to the new one, and the file leaves the origin tool with a journal entry.",af:"Le responsable décide du transfert. Les commissions passées restent au courtier d'origine, les futures vont au nouveau, et le dossier quitte l'outil d'origine avec une trace au journal.",n:""},
+{c:"Functional",q:"Can two people edit at once?",qf:"Deux personnes peuvent éditer en même temps ?",a:"On shared files there is a one-at-a-time lock — one edits, the others are read-only. No silent simultaneous editing.",af:"Sur les fichiers partagés, il y a un verrou chacun son tour — une personne édite, les autres sont en lecture seule. Pas d'édition simultanée silencieuse.",n:""},
+{c:"Functional",q:"Does it generate emails?",qf:"Ça génère des e-mails ?",a:"Yes — it drafts emails and reporting; the broker approves and sends in one click.",af:"Oui — il rédige les e-mails et le reporting ; le courtier valide et envoie en un clic.",n:""},
+{c:"Functional",q:"Internal vs client reporting?",qf:"Reporting interne vs client ?",a:"Two versions. The internal one keeps the broker's comments; the client one never shows them, and the email opens ready to send.",af:"Deux versions. L'interne garde les commentaires du courtier ; la version client ne les montre jamais, et l'e-mail s'ouvre prêt à envoyer.",n:""},
+
+/* ================= ECOSYSTEM ================= */
+{c:"Ecosystem",q:"You mentioned five tools — what are they?",qf:"Vous avez parlé de cinq outils — lesquels ?",a:"Around the same engine: the Broker Platform and the Credit Platform, plus Tenders, Factor and Bonding. One method, five tools this year.",af:"Autour du même moteur : la Broker Platform et la Credit Platform, plus Tenders, Factor et Bonding. Une méthode, cinq outils cette année.",n:""},
+{c:"Ecosystem",q:"What is the Credit Platform?",qf:"C'est quoi la Credit Platform ?",a:"The same desk, deployed at the insured client — their own accounts and SharePoint, their own view, internal comments stripped.",af:"Le même desk, déployé chez le client assuré — ses propres comptes et SharePoint, sa propre vue, sans les commentaires internes.",n:""},
+{c:"Ecosystem",q:"What is the Tenders Platform?",qf:"C'est quoi la Tenders Platform ?",a:"A tool to run credit-insurance tenders and arbitrage — comparing insurer offers to place a programme. Open internally, no login.",af:"Un outil pour gérer les appels d'offres et l'arbitrage en assurance-crédit — comparer les offres des assureurs pour placer un programme. Ouvert en interne, sans connexion.",n:""},
+{c:"Ecosystem",q:"What is the Factor Platform?",qf:"C'est quoi la Factor Platform ?",a:"A factoring-steering tool for brokers — piloting the factoring programme, one file per broker.",af:"Un outil de pilotage de l'affacturage pour les courtiers — piloter le programme d'affacturage, un fichier par courtier.",n:""},
+{c:"Ecosystem",q:"What is the Bonding Platform?",qf:"C'est quoi la Bonding Platform ?",a:"A tool to manage surety and bonding lines, with the same BI and shared-file model.",af:"Un outil pour gérer les lignes de cautions, avec la même BI et le même modèle de fichier partagé.",n:""},
+{c:"Ecosystem",q:"Do they share the same engine?",qf:"Ils partagent le même moteur ?",a:"Yes — one common core: login, encrypted SharePoint save, statuses, manager view, licence and the Aon remote lock. Each tool adds its own desk logic.",af:"Oui — un socle commun : connexion, sauvegarde SharePoint chiffrée, statuts, vue responsable, licence et verrou Aon à distance. Chaque outil ajoute sa logique métier.",n:""},
+{c:"Ecosystem",q:"Why build five instead of one?",qf:"Pourquoi cinq outils plutôt qu'un seul ?",a:"Each desk has its own workflow, but they share the same core. Reusing the engine is why five could exist in a year.",af:"Chaque desk a son propre workflow, mais ils partagent le même socle. C'est la réutilisation du moteur qui a permis cinq outils en un an.",n:""},
+{c:"Ecosystem",q:"Are the other tools in production?",qf:"Les autres outils sont en production ?",a:"They are in pilot and test with real brokers and clients — same approach as the Broker Platform.",af:"Ils sont en pilote et en test avec de vrais courtiers et clients — même approche que la Broker Platform.",n:"↳ Rester honnête : des pilotes, pas encore à l'échelle du groupe."},
+
+/* ================= NOA ================= */
+{c:"Noa",q:"What is Noa?",qf:"C'est quoi Noa ?",a:"Noa is the broker's assistant. It is rules-based, built inside the file — not an external AI. It prepares tasks, notes and email drafts; the broker approves in one click.",af:"Noa est l'assistant du courtier. Il est basé sur des règles, construit dans le fichier — pas une IA externe. Il prépare tâches, notes et brouillons d'e-mails ; le courtier valide en un clic.",n:""},
+{c:"Noa",q:"Does Noa send data to an AI service?",qf:"Est-ce que Noa envoie des données à un service d'IA ?",a:"No. In the team version it runs on local rules, inside the tool. Nothing is sent to any outside service.",af:"Non. Dans la version équipe il tourne sur des règles locales, dans l'outil. Rien n'est envoyé à un service extérieur.",n:"↳ Le dire fermement — c'est la réassurance qu'ils attendent."},
+{c:"Noa",q:"Is Noa ChatGPT or an external model?",qf:"Noa, c'est ChatGPT ou un modèle externe ?",a:"No. Noa is logic coded into the file — if this, then that. No external model, no data leaving.",af:"Non. Noa, c'est de la logique codée dans le fichier — si ceci, alors cela. Pas de modèle externe, aucune donnée qui sort.",n:""},
+{c:"Noa",q:"What does Noa automate?",qf:"Noa automatise quoi ?",a:"It prepares the repetitive work — follow-up tasks, notes, reporting and email drafts — and surfaces what needs attention. The broker stays in control.",af:"Il prépare le travail répétitif — tâches de relance, notes, reporting et brouillons d'e-mails — et fait remonter ce qui demande attention. Le courtier garde la main.",n:""},
+{c:"Noa",q:"Does Noa make decisions on its own?",qf:"Noa prend des décisions tout seul ?",a:"No — it proposes, the broker approves. Every action needs a human click.",af:"Non — il propose, le courtier valide. Chaque action demande un clic humain.",n:""},
+{c:"Noa",q:"Could Noa use a real AI model later?",qf:"Noa pourrait utiliser un vrai modèle d'IA plus tard ?",a:"It could, as an option, kept inside Aon's environment. Today it is deliberately rules-based so nothing leaves and nothing is invented.",af:"Ça pourrait, en option, en restant dans l'environnement Aon. Aujourd'hui il est volontairement basé sur des règles pour que rien ne sorte et que rien ne soit inventé.",n:""},
+{c:"Noa",q:"How do you stop Noa from inventing things?",qf:"Comment vous empêchez Noa d'inventer des choses ?",a:"Because it is rules-based, not generative — it only acts on the data in the file, following coded logic. There is nothing to hallucinate.",af:"Parce qu'il est basé sur des règles, pas génératif — il n'agit que sur la donnée du fichier, en suivant une logique codée. Il n'y a rien à halluciner.",n:""},
+
+/* ================= TECHNICAL ================= */
+{c:"Technical",q:"What is it built with?",qf:"C'est construit avec quoi ?",a:"Standard web technology — HTML, CSS and JavaScript, no framework, no network dependency. One file, opened in Chrome.",af:"De la techno web standard — HTML, CSS et JavaScript, sans framework, sans dépendance réseau. Un fichier, ouvert dans Chrome.",n:""},
+{c:"Technical",q:"Why a single HTML file?",qf:"Pourquoi un seul fichier HTML ?",a:"It needs no server, no install and no IT project. One file on SharePoint means everyone is on the same version instantly.",af:"Pas de serveur, pas d'installation, pas de projet IT. Un fichier sur SharePoint, et tout le monde est sur la même version instantanément.",n:""},
+{c:"Technical",q:"Why no framework?",qf:"Pourquoi pas de framework ?",a:"Stability and longevity. Standard web tech does not break on updates and any developer can read it, with no framework churn.",af:"Stabilité et longévité. La techno web standard ne casse pas aux mises à jour et n'importe quel développeur peut la lire, sans valse de frameworks.",n:""},
+{c:"Technical",q:"Does it need a server?",qf:"Ça a besoin d'un serveur ?",a:"No. It runs entirely in the browser, on the user's device. There is nothing to host.",af:"Non. Ça tourne entièrement dans le navigateur, sur le poste de l'utilisateur. Il n'y a rien à héberger.",n:""},
+{c:"Technical",q:"Does it need Aon IT to deploy?",qf:"Il faut l'IT d'Aon pour le déployer ?",a:"No. You share one file on SharePoint and every broker is on the same version. The DSI approved building the pilot.",af:"Non. On partage un fichier sur SharePoint et chaque courtier est sur la même version. La DSI a validé la construction du pilote.",n:""},
+{c:"Technical",q:"How does it save with no server?",qf:"Comment ça sauvegarde sans serveur ?",a:"It saves automatically to the user's own SharePoint or OneDrive — encrypted — and keeps a local copy. No external database.",af:"Ça sauvegarde automatiquement sur le SharePoint ou OneDrive de l'utilisateur — chiffré — et garde une copie locale. Aucune base externe.",n:""},
+{c:"Technical",q:"How do you handle large data in the browser?",qf:"Comment vous gérez de grosses données dans le navigateur ?",a:"It loads heavy portfolios group by group, with a loading message, so a big international programme stays fluid.",af:"Il charge les gros portefeuilles groupe par groupe, avec un message de chargement, pour qu'un grand programme international reste fluide.",n:""},
+{c:"Technical",q:"How do you version it?",qf:"Comment vous gérez les versions ?",a:"Every release is numbered, by lot and version, and kept — so you can always roll back.",af:"Chaque version est numérotée, par lot et par version, et conservée — on peut toujours revenir en arrière.",n:""},
+{c:"Technical",q:"How do you test before release?",qf:"Comment vous testez avant de livrer ?",a:"A fixed six-step method: build, test the flows, check the header, verify export and licence states, then ship the file with a version note.",af:"Une méthode fixe en six étapes : construire, tester les parcours, vérifier l'en-tête, contrôler l'export et les états de licence, puis livrer le fichier avec une note de version.",n:""},
+{c:"Technical",q:"What if Chrome updates and breaks it?",qf:"Et si une mise à jour de Chrome le casse ?",a:"It uses stable, standard web tech with no framework. If anything needs a fix, it is one file to update — fast, testable, and every version is kept to roll back.",af:"Il utilise de la techno web standard et stable, sans framework. Si quelque chose doit être corrigé, c'est un seul fichier à mettre à jour — rapide, testable, et chaque version est gardée pour revenir en arrière.",n:""},
+{c:"Technical",q:"Does it run on a locked-down PC?",qf:"Ça tourne sur un PC verrouillé ?",a:"Yes — it is just an HTML file opened in Chrome, no install and no admin rights. It runs inside the managed environment.",af:"Oui — c'est juste un fichier HTML ouvert dans Chrome, sans installation ni droits admin. Ça tourne dans l'environnement managé.",n:""},
+{c:"Technical",q:"Does it work offline?",qf:"Ça marche hors-ligne ?",a:"Yes — everything runs locally. Only the public-registry watch needs the web.",af:"Oui — tout tourne en local. Seule la veille des registres publics a besoin du web.",n:""},
+{c:"Technical",q:"Which browser?",qf:"Quel navigateur ?",a:"Chrome, the team's reference browser.",af:"Chrome, le navigateur de référence de l'équipe.",n:""},
+{c:"Technical",q:"Is there a mobile version?",qf:"Il y a une version mobile ?",a:"It opens in a mobile browser for consultation; the full desk work is designed for Chrome on the PC.",af:"Il s'ouvre dans un navigateur mobile pour la consultation ; le travail complet du desk est pensé pour Chrome sur PC.",n:""},
+{c:"Technical",q:"How big is the file?",qf:"Il fait quelle taille, le fichier ?",a:"A single self-contained file, light enough to share on SharePoint or by email. One file, nothing attached.",af:"Un seul fichier autonome, assez léger pour être partagé sur SharePoint ou par e-mail. Un fichier, rien en pièce jointe.",n:""},
+
+/* ================= API ================= */
+{c:"API",q:"How can HTML call live insurer APIs?",qf:"Comment du HTML peut appeler les API des assureurs en direct ?",a:"Today it works on manual upload. For step two, a light companion Chrome extension acts as a secure relay — it holds the secret and handles the connection, so the HTML stays one file.",af:"Aujourd'hui ça marche en import manuel. Pour l'étape deux, une petite extension Chrome compagnon fait relais sécurisé — elle garde le secret et gère la connexion, pour que le HTML reste un seul fichier.",n:"↳ Un navigateur seul ne peut ni garder un secret ni passer CORS ; le petit relais est la façon standard minimale."},
+{c:"API",q:"Why a Chrome extension relay?",qf:"Pourquoi un relais par extension Chrome ?",a:"A page alone cannot keep an API secret or get past CORS. The extension holds the secret and relays the call — no hosted server, no dependency on Aon IT.",af:"Une page seule ne peut pas garder un secret d'API ni passer CORS. L'extension garde le secret et relaie l'appel — sans serveur hébergé, sans dépendance à l'IT d'Aon.",n:""},
+{c:"API",q:"Which insurers first?",qf:"Quels assureurs en premier ?",a:"Atradius first, then Coface and Allianz Trade — reusing the same connection brick.",af:"Atradius d'abord, puis Coface et Allianz Trade — en réutilisant la même brique de connexion.",n:""},
+{c:"API",q:"Is the extension also shadow IT?",qf:"L'extension, c'est pas aussi du shadow IT ?",a:"No — it is a small, declared, reviewable component that only relays calls the broker is entitled to make. It can be packaged and approved like any extension.",af:"Non — c'est un petit composant déclaré et auditable qui ne relaie que des appels auxquels le courtier a droit. Il peut être packagé et validé comme n'importe quelle extension.",n:""},
+{c:"API",q:"What is step one versus step two?",qf:"C'est quoi l'étape un contre l'étape deux ?",a:"Step one is live today: manual upload, full functionality. Step two adds live insurer APIs through the relay, so data flows in automatically.",af:"L'étape un est opérationnelle aujourd'hui : import manuel, fonctionnalités complètes. L'étape deux ajoute les API assureurs en direct via le relais, pour que la donnée entre automatiquement.",n:""},
+{c:"API",q:"Timeline for the APIs?",qf:"C'est quoi le calendrier pour les API ?",a:"After the pilot proves the desk value. The API layer is designed and ready to build on the same brick.",af:"Après que le pilote ait prouvé la valeur du desk. La couche API est conçue et prête à construire sur la même brique.",n:""},
+{c:"API",q:"Could it connect to Aon's internal systems or Trading Desk?",qf:"Ça pourrait se connecter aux systèmes internes d'Aon ou au Trading Desk ?",a:"Yes — the same relay approach can connect approved internal endpoints, step by step, once the pilot is validated.",af:"Oui — la même approche de relais peut connecter des points internes approuvés, étape par étape, une fois le pilote validé.",n:"↳ Le présenter comme une direction, pas une promesse datée."},
+
+/* ================= SECURITY ================= */
+{c:"Security",q:"Walk me through the security model.",qf:"Expliquez-moi le modèle de sécurité.",a:"Accounts by email, encrypted save on Aon's SharePoint, auto-lock, a manager view scoped to the team, a signed Aon licence that can switch it off, obfuscated code, and a full audit trail.",af:"Comptes par e-mail, sauvegarde chiffrée sur le SharePoint d'Aon, verrouillage automatique, vue responsable limitée à l'équipe, licence Aon signée qui peut tout couper, code obfusqué, et une traçabilité complète.",n:""},
+{c:"Security",q:"Where is the data stored?",qf:"Où sont stockées les données ?",a:"On Aon's own SharePoint or OneDrive, saved automatically — no external cloud, no third-party database.",af:"Sur le SharePoint ou OneDrive d'Aon, sauvegardé automatiquement — aucun cloud externe, aucune base tierce.",n:""},
+{c:"Security",q:"Does any data leave Aon?",qf:"Est-ce que des données sortent d'Aon ?",a:"No. Everything is computed on the device and saved inside Aon. Nothing is sent to any vendor.",af:"Non. Tout est calculé sur le poste et sauvegardé chez Aon. Rien n'est envoyé à un éditeur.",n:"↳ La réassurance la plus importante — le dire clairement."},
+{c:"Security",q:"Is the data encrypted?",qf:"Les données sont chiffrées ?",a:"Yes — the saved file is encrypted with AES-GCM, with a key derived from the password. The raw file is unreadable without credentials.",af:"Oui — le fichier sauvegardé est chiffré en AES-GCM, avec une clé dérivée du mot de passe. Le fichier brut est illisible sans identifiants.",n:""},
+{c:"Security",q:"How are passwords handled?",qf:"Comment sont gérés les mots de passe ?",a:"Passwords are never stored — they are derived with PBKDF2 at six hundred thousand iterations, one key per user. Unlock is by the admin.",af:"Les mots de passe ne sont jamais stockés — ils sont dérivés en PBKDF2 avec six cent mille itérations, une clé par utilisateur. Le déblocage se fait par l'administrateur.",n:""},
+{c:"Security",q:"How is access controlled?",qf:"Comment est contrôlé l'accès ?",a:"Accounts by email, auto-lock after inactivity, and a manager view limited to the team — with every action traced to the person who made it.",af:"Comptes par e-mail, verrouillage après inactivité, et vue responsable limitée à l'équipe — avec chaque action tracée à la personne qui l'a faite.",n:""},
+{c:"Security",q:"Can Aon switch the tool off remotely?",qf:"Aon peut couper l'outil à distance ?",a:"Yes — a signed licence has four states: full, grace, read-only and blocked. And the export always stays open — the data is never held hostage.",af:"Oui — une licence signée a quatre états : plein, grâce, lecture seule et bloqué. Et l'export reste toujours ouvert — la donnée n'est jamais prise en otage.",n:""},
+{c:"Security",q:"What if the licence check server is unreachable?",qf:"Et si le serveur de vérification de licence est injoignable ?",a:"It moves to a grace state, not an instant cut — the goal is strong deterrence, not breaking the broker's day.",af:"Il passe en état de grâce, pas une coupure immédiate — l'objectif est une dissuasion forte, pas de casser la journée du courtier.",n:""},
+{c:"Security",q:"Is there clock-rollback protection?",qf:"Il y a une protection anti-recul d'horloge ?",a:"Yes — the licence resists clock rollback, and the check-in responses are signed.",af:"Oui — la licence résiste au recul d'horloge, et les réponses de vérification sont signées.",n:""},
+{c:"Security",q:"Is the code protected?",qf:"Le code est protégé ?",a:"The shipped file is minified and obfuscated, with encrypted text and data, and an alert if developer tools are opened.",af:"Le fichier livré est minifié et obfusqué, avec textes et données chiffrés, et une alerte si les outils développeur sont ouverts.",n:"↳ Honnête si on insiste : aucun HTML n'est vraiment illisible — c'est de la dissuasion forte, pas un mur absolu."},
+{c:"Security",q:"What if someone copies the file?",qf:"Et si quelqu'un copie le fichier ?",a:"A copy is encrypted, obfuscated and tied to the licence — costly to break and blockable remotely. It is strong deterrence by design.",af:"Une copie est chiffrée, obfusquée et liée à la licence — coûteuse à casser et blocable à distance. C'est de la dissuasion forte par conception.",n:""},
+{c:"Security",q:"What happens when someone leaves Aon?",qf:"Que se passe-t-il quand quelqu'un quitte Aon ?",a:"The admin disables the account and revokes the key; their copy drops to read-only. Aon's shared data is untouched.",af:"L'administrateur désactive le compte et révoque la clé ; sa copie passe en lecture seule. La donnée partagée d'Aon n'est pas touchée.",n:""},
+{c:"Security",q:"Has it been penetration tested?",qf:"Il a été testé en intrusion ?",a:"It is built to Aon's Microsoft 365 security and ready for a security review as part of the pilot.",af:"Il est construit sur la sécurité Microsoft 365 d'Aon et prêt pour une revue de sécurité dans le cadre du pilote.",n:"↳ Ne pas prétendre un pentest formel s'il n'y en a pas eu ; le proposer comme étape du pilote."},
+{c:"Security",q:"How is the extension's secret protected?",qf:"Comment est protégé le secret de l'extension ?",a:"The secret lives in the extension, not the page, and never reaches the HTML — that is the whole point of the relay.",af:"Le secret vit dans l'extension, pas dans la page, et n'atteint jamais le HTML — c'est tout l'intérêt du relais.",n:""},
+{c:"Security",q:"Is there an audit trail?",qf:"Il y a une piste d'audit ?",a:"Yes — every action is time-stamped and attributed, and the journal is kept.",af:"Oui — chaque action est horodatée et attribuée, et le journal est conservé.",n:""},
+{c:"Security",q:"Does it fit Aon's Microsoft 365 security?",qf:"Ça s'intègre à la sécurité Microsoft 365 d'Aon ?",a:"Yes — it lives on SharePoint, so Entra ID, multi-factor and conditional access already decide who can open it. It inherits Aon's identity security.",af:"Oui — il vit sur SharePoint, donc Entra ID, le multi-facteur et l'accès conditionnel décident déjà qui peut l'ouvrir. Il hérite de la sécurité d'identité d'Aon.",n:""},
+
+/* ================= COMPLIANCE ================= */
+{c:"Compliance",q:"What about GDPR and client data?",qf:"Et le RGPD, les données clients ?",a:"The data stays inside Aon's own tenant, encrypted, under Aon's existing governance. The demo uses fictitious data, and internal comments never leave in client documents.",af:"La donnée reste dans le tenant d'Aon, chiffrée, sous la gouvernance existante d'Aon. La démo utilise des données fictives, et les commentaires internes ne partent jamais dans les documents client.",n:""},
+{c:"Compliance",q:"Where does the data physically sit?",qf:"Où se trouvent physiquement les données ?",a:"In Aon's Microsoft 365 tenant — SharePoint or OneDrive — nowhere else.",af:"Dans le tenant Microsoft 365 d'Aon — SharePoint ou OneDrive — nulle part ailleurs.",n:""},
+{c:"Compliance",q:"How does it fit Entra ID and conditional access?",qf:"Comment ça s'articule avec Entra ID et l'accès conditionnel ?",a:"Because it lives on SharePoint, Aon's identity, MFA and conditional-access rules already govern who can open the file. It inherits them.",af:"Comme il vit sur SharePoint, l'identité d'Aon, le MFA et les règles d'accès conditionnel gouvernent déjà qui peut ouvrir le fichier. Il en hérite.",n:""},
+{c:"Compliance",q:"What about DLP?",qf:"Et la DLP ?",a:"The data never leaves the tenant and is encrypted at rest, so Aon's existing DLP and Microsoft 365 controls apply. No dataset is pushed outside.",af:"La donnée ne quitte jamais le tenant et est chiffrée au repos, donc la DLP et les contrôles Microsoft 365 d'Aon s'appliquent. Aucun jeu de données n'est poussé dehors.",n:""},
+{c:"Compliance",q:"What about data retention?",qf:"Et la rétention des données ?",a:"Retention follows Aon's SharePoint governance — the files live under Aon's existing rules, not a separate store.",af:"La rétention suit la gouvernance SharePoint d'Aon — les fichiers vivent sous les règles existantes d'Aon, pas un stockage à part.",n:""},
+{c:"Compliance",q:"Client confidentiality — how is it protected?",qf:"La confidentialité client, comment elle est protégée ?",a:"Internal comments are stripped from client documents, data is encrypted, and each person only sees the accounts they are on.",af:"Les commentaires internes sont retirés des documents client, la donnée est chiffrée, et chacun ne voit que les comptes dont il fait partie.",n:""},
+{c:"Compliance",q:"Any data to third parties?",qf:"Des données vers des tiers ?",a:"None. No vendor, no external cloud, no analytics service. Everything stays in Aon.",af:"Aucune. Pas d'éditeur, pas de cloud externe, pas de service d'analytics. Tout reste chez Aon.",n:""},
+{c:"Compliance",q:"Any regulatory considerations for broking?",qf:"Des considérations réglementaires pour le courtage ?",a:"It keeps the records, the audit trail and the client documents inside Aon's governed environment, which supports broking compliance rather than working around it.",af:"Il garde les enregistrements, la piste d'audit et les documents client dans l'environnement gouverné d'Aon, ce qui soutient la conformité du courtage plutôt que de la contourner.",n:"↳ Renvoyer les détails à la conformité Aon ; se positionner en soutien."},
+
+/* ================= COMMERCIALS ================= */
+{c:"Commercials",q:"What does it cost?",qf:"Ça coûte combien ?",a:"Zero for a licence. Zero for hosting or servers. It runs on Aon's existing SharePoint.",af:"Zéro de licence. Zéro d'hébergement ou de serveurs. Ça tourne sur le SharePoint existant d'Aon.",n:""},
+{c:"Commercials",q:"Are there hidden costs?",qf:"Y a-t-il des coûts cachés ?",a:"No per-seat fee, no cloud bill, no third-party subscription. The only thing Aon already pays for — SharePoint — is where it lives.",af:"Pas de coût par utilisateur, pas de facture cloud, pas d'abonnement tiers. La seule chose qu'Aon paie déjà — SharePoint — c'est là qu'il vit.",n:""},
+{c:"Commercials",q:"Cost to scale to more brokers?",qf:"Quel coût pour passer à plus de courtiers ?",a:"Nothing extra — you share the same file. There is no per-user licence.",af:"Rien de plus — on partage le même fichier. Il n'y a pas de licence par utilisateur.",n:""},
+{c:"Commercials",q:"What would it cost to productionise?",qf:"Ça coûterait quoi de l'industrialiser ?",a:"Mostly time, not licences — a security review, broker training and the API step. No platform or server spend.",af:"Surtout du temps, pas des licences — une revue de sécurité, la formation des courtiers et l'étape API. Aucune dépense de plateforme ou de serveur.",n:""},
+{c:"Commercials",q:"If it is free, what is the catch?",qf:"Si c'est gratuit, où est le piège ?",a:"No catch — it reuses what Aon already owns and I built it in-house. The investment is the method and the time, not software fees.",af:"Pas de piège — ça réutilise ce qu'Aon possède déjà et je l'ai construit en interne. L'investissement, c'est la méthode et le temps, pas des frais de logiciel.",n:""},
+
+/* ================= DEPENDENCY ================= */
+{c:"Dependency",q:"What if you leave, or are not available?",qf:"Et si vous partez, ou n'êtes pas disponible ?",a:"You do not depend on me. Aon holds the licence and the SharePoint. The format is open and documented, so any developer can maintain it — and it can evolve with light code or an AI assistant.",af:"Vous ne dépendez pas de moi. Aon détient la licence et le SharePoint. Le format est ouvert et documenté, donc n'importe quel développeur peut le maintenir — et il peut évoluer avec un peu de code ou un assistant IA.",n:""},
+{c:"Dependency",q:"Is it a black box?",qf:"C'est une boîte noire ?",a:"No. The source is in named chapters, there is a full spec per tool in Word and HTML, every version is numbered, and it is auditable line by line.",af:"Non. Le code source est en chapitres nommés, il y a une spec complète par outil en Word et HTML, chaque version est numérotée, et c'est auditable ligne par ligne.",n:""},
+{c:"Dependency",q:"Who owns it?",qf:"À qui ça appartient ?",a:"Aon. It was built for Aon, on Aon's systems, with fictitious data in the demo.",af:"À Aon. Il a été construit pour Aon, sur les systèmes d'Aon, avec des données fictives dans la démo.",n:""},
+{c:"Dependency",q:"Can another developer maintain it?",qf:"Un autre développeur peut le maintenir ?",a:"Yes — standard web tech, no framework, documented and chaptered. Any web developer can pick it up.",af:"Oui — techno web standard, sans framework, documenté et chapitré. N'importe quel développeur web peut le reprendre.",n:""},
+{c:"Dependency",q:"How are bugs fixed or features added?",qf:"Comment on corrige les bugs ou ajoute des fonctions ?",a:"Every change follows the same six-step method and ships as one file to SharePoint; everyone is up to date on next open.",af:"Chaque changement suit la même méthode en six étapes et se livre en un fichier sur SharePoint ; tout le monde est à jour à la prochaine ouverture.",n:""},
+{c:"Dependency",q:"What is the support model?",qf:"C'est quoi le modèle de support ?",a:"One file to update, versioned and roll-back-able. A fix is fast and testable before release — no server outage to manage.",af:"Un fichier à mettre à jour, versionné et réversible. Une correction est rapide et testable avant livraison — aucune panne serveur à gérer.",n:""},
+{c:"Dependency",q:"Is it documented?",qf:"C'est documenté ?",a:"Yes — a full specification per tool, in Word and HTML, plus numbered versions and a named-chapter codebase.",af:"Oui — une spécification complète par outil, en Word et HTML, plus des versions numérotées et un code en chapitres nommés.",n:""},
+
+/* ================= ROLLOUT ================= */
+{c:"Rollout",q:"What are the next steps?",qf:"Quelles sont les prochaines étapes ?",a:"Step one: a pilot with a few brokers in France. Step two: study the wider rollout. I would keep it bespoke and controlled.",af:"Étape un : un pilote avec quelques courtiers en France. Étape deux : étudier le déploiement élargi. Je le garderais sur-mesure et maîtrisé.",n:""},
+{c:"Rollout",q:"How big a pilot?",qf:"Un pilote de quelle taille ?",a:"A two-month pilot with three to five brokers in France.",af:"Un pilote de deux mois avec trois à cinq courtiers en France.",n:""},
+{c:"Rollout",q:"How is it distributed to brokers?",qf:"Comment c'est distribué aux courtiers ?",a:"One file, shared through SharePoint, with the link sent via Teams. Each broker gets their own account.",af:"Un fichier, partagé via SharePoint, avec le lien envoyé par Teams. Chaque courtier a son propre compte.",n:""},
+{c:"Rollout",q:"How do brokers adopt it?",qf:"Comment les courtiers l'adoptent ?",a:"It mirrors their real workflow, so onboarding is light — their own file, their own accounts, with training alongside.",af:"Il reflète leur vrai workflow, donc la prise en main est légère — leur fichier, leurs comptes, avec une formation en accompagnement.",n:""},
+{c:"Rollout",q:"Is there training?",qf:"Il y a une formation ?",a:"Yes — I am preparing broker training, and brokers' backups sit in shared SharePoint folders so activity can be followed.",af:"Oui — je prépare une formation courtiers, et les sauvegardes des courtiers sont dans des dossiers SharePoint partagés pour suivre l'activité.",n:""},
+{c:"Rollout",q:"What about brokers who resist change?",qf:"Et les courtiers réfractaires au changement ?",a:"It saves them manual work rather than adding to it, and keeps their own files — so the pilot shows value before any wider push.",af:"Ça leur enlève du travail manuel au lieu d'en ajouter, et garde leurs propres fichiers — donc le pilote montre la valeur avant toute généralisation.",n:""},
+{c:"Rollout",q:"How do you measure pilot success?",qf:"Comment vous mesurez le succès du pilote ?",a:"Time saved on reporting, cleaner data, broker adoption and the quality of client output over the two months.",af:"Le temps gagné sur le reporting, une donnée plus propre, l'adoption par les courtiers et la qualité des livrables client sur les deux mois.",n:""},
+{c:"Rollout",q:"Other languages or regions?",qf:"D'autres langues ou régions ?",a:"It already works in French and English. More languages can come after the group gives the green light.",af:"Il marche déjà en français et en anglais. D'autres langues peuvent venir après le feu vert du groupe.",n:""},
+{c:"Rollout",q:"Who sponsors it internally?",qf:"Qui le sponsorise en interne ?",a:"It is built for the French credit desk, and the DSI approved building the pilot. Wider sponsorship is what this conversation is about.",af:"Il est construit pour le desk crédit français, et la DSI a validé la construction du pilote. Un sponsoring plus large, c'est justement l'objet de cette discussion.",n:""},
+
+/* ================= OBJECTIONS ================= */
+{c:"Objections",q:"Does this compete with the Power BI we pay for?",qf:"Ça concurrence le Power BI qu'on paie déjà ?",a:"No — they can coexist. Power BI is great for general BI; this is the specialised, zero-cost, data-stays-in layer for the credit desk, and it acts, not just reports.",af:"Non — les deux coexistent. Power BI est excellent pour la BI générale ; là c'est la couche spécialisée, à coût zéro, où la donnée reste, pour le desk crédit, et ça agit, ça ne fait pas que du reporting.",n:"↳ Chaleureux, pas défensif. Les gens Power BI sont dans la salle."},
+{c:"Objections",q:"Why was IT not involved from the start?",qf:"Pourquoi l'IT n'a pas été impliquée dès le départ ?",a:"Because it needed no server or hosting to exist, I could build and prove it fast. The DSI approved the pilot, and IT is exactly who I want involved for the security review and the rollout.",af:"Parce qu'il n'avait besoin ni de serveur ni d'hébergement pour exister, j'ai pu le construire et le prouver vite. La DSI a validé le pilote, et l'IT est justement qui je veux impliquer pour la revue de sécurité et le déploiement.",n:""},
+{c:"Objections",q:"A single HTML file sounds fragile or risky.",qf:"Un seul fichier HTML, ça fait fragile ou risqué.",a:"It is the opposite of fragile — standard tech, encrypted, versioned, roll-back-able, inside SharePoint behind Microsoft 365 sign-in, and Aon can switch it off remotely. No hidden server, no external data flow.",af:"C'est l'inverse de fragile — techno standard, chiffré, versionné, réversible, dans SharePoint derrière la connexion Microsoft 365, et Aon peut le couper à distance. Pas de serveur caché, aucun flux de données externe.",n:""},
+{c:"Objections",q:"Isn't this shadow IT?",qf:"C'est pas du shadow IT ?",a:"Shadow IT hides and leaks data. This does the opposite — open, auditable, encrypted, inside Aon's tenant, under Aon's identity controls, and remotely blockable. I want IT in the loop.",af:"Le shadow IT cache et fait fuir la donnée. Là c'est l'inverse — ouvert, auditable, chiffré, dans le tenant d'Aon, sous les contrôles d'identité d'Aon, et blocable à distance. Je veux l'IT dans la boucle.",n:""},
+{c:"Objections",q:"What if it scales badly?",qf:"Et si ça passe mal à l'échelle ?",a:"It was designed for big international programmes, loading group by group. And scaling users costs nothing — the same file is shared.",af:"Il a été conçu pour les grands programmes internationaux, en chargeant groupe par groupe. Et passer à plus d'utilisateurs ne coûte rien — on partage le même fichier.",n:""},
+{c:"Objections",q:"How do we support it long term?",qf:"Comment on le maintient sur le long terme ?",a:"One documented file, versioned, no framework, maintainable by any web developer or with an AI assistant. A fix is one file, tested before release.",af:"Un fichier documenté, versionné, sans framework, maintenable par n'importe quel développeur web ou avec un assistant IA. Une correction, c'est un fichier, testé avant livraison.",n:""},
+{c:"Objections",q:"Security of a file anyone could open?",qf:"La sécurité d'un fichier que n'importe qui pourrait ouvrir ?",a:"Only people inside Aon's Microsoft 365 can open it, the content is encrypted, access auto-locks, and it is traceable and remotely blockable. Opening it needs Aon credentials.",af:"Seules les personnes dans le Microsoft 365 d'Aon peuvent l'ouvrir, le contenu est chiffré, l'accès se verrouille tout seul, et c'est traçable et blocable à distance. L'ouvrir demande des identifiants Aon.",n:""},
+{c:"Objections",q:"Is this a prototype or a real tool?",qf:"C'est un prototype ou un vrai outil ?",a:"It is operational today, end to end, on manual upload. The demo is fictitious data; everything is reproducible with real data.",af:"Il est opérationnel aujourd'hui, de bout en bout, en import manuel. La démo utilise des données fictives ; tout est reproductible avec des données réelles.",n:""},
+{c:"Objections",q:"What stops a broker leaking client data through export?",qf:"Qu'est-ce qui empêche un courtier de faire fuiter des données via l'export ?",a:"Export stays inside Aon's governed environment and the audit trail records it. The same Microsoft 365 DLP that covers any Aon file covers this.",af:"L'export reste dans l'environnement gouverné d'Aon et la piste d'audit l'enregistre. La même DLP Microsoft 365 qui couvre n'importe quel fichier Aon le couvre aussi.",n:""},
+{c:"Objections",q:"Why should the group trust a self-built tool?",qf:"Pourquoi le groupe ferait confiance à un outil fait maison ?",a:"Because it is auditable line by line, documented, owned by Aon, running on Aon's systems, and proposed for a controlled pilot with a security review — not a leap of faith.",af:"Parce qu'il est auditable ligne par ligne, documenté, propriété d'Aon, tournant sur les systèmes d'Aon, et proposé pour un pilote maîtrisé avec revue de sécurité — pas un acte de foi.",n:""},
+{c:"Objections",q:"Why not an off-the-shelf BI or insurer portal?",qf:"Pourquoi pas une BI du marché ou un portail assureur ?",a:"Those are great in general, but not built for the credit desk, they carry a licence and a vendor, and the data leaves your environment. This is purpose-built, zero-cost, keeps data in Aon, and acts, not just shows.",af:"Ils sont très bien en général, mais pas construits pour le desk crédit, ils portent une licence et un éditeur, et la donnée quitte votre environnement. Là c'est sur-mesure, à coût zéro, la donnée reste chez Aon, et ça agit, pas seulement afficher.",n:""},
+{c:"Objections",q:"What is the catch if it is free?",qf:"C'est quoi le piège si c'est gratuit ?",a:"There is none — it reuses what Aon already owns and was built in-house. The cost was time and method, not software fees.",af:"Il n'y en a pas — ça réutilise ce qu'Aon possède déjà et ça a été construit en interne. Le coût, c'était le temps et la méthode, pas des frais de logiciel.",n:""},
+
+/* ================= ABOUT ME ================= */
+{c:"About me",q:"Who are you and what is your role?",qf:"Qui êtes-vous et quel est votre rôle ?",a:"Digital manager for risk and broking at Aon Credit Solutions France. I run the desk and I build the digital tools for it.",af:"Digital manager risque et courtage chez Aon Credit Solutions France. Je gère le desk et je construis les outils digitaux pour ce desk.",n:""},
+{c:"About me",q:"How did you build this without being a developer?",qf:"Comment avez-vous construit ça sans être développeur ?",a:"A product and UX background, plus coding I learned in my last fintech role, and an AI coding assistant. I write the specs and design, and build with the AI.",af:"Un parcours produit et UX, plus du code appris à mon dernier poste en fintech, et un assistant de code IA. J'écris les specs et le design, et je construis avec l'IA.",n:""},
+{c:"About me",q:"What is your background?",qf:"C'est quoi votre parcours ?",a:"Banking, credit insurance underwriting, group credit management, and operating director in a fintech — then Aon. Finance and digital together.",af:"Banque, souscription en assurance-crédit, credit management groupe, et directeur opérationnel en fintech — puis Aon. Finance et digital ensemble.",n:""},
+{c:"About me",q:"What is AI Activator?",qf:"C'est quoi AI Activator ?",a:"A 2026 certification — I work as an AI professional in finance, which is exactly what produced these tools.",af:"Une certification 2026 — je travaille comme professionnel de l'IA dans la finance, c'est exactement ce qui a produit ces outils.",n:""},
+{c:"About me",q:"How much time did this take you?",qf:"Ça vous a pris combien de temps ?",a:"Months, with intense recent weeks. The shared engine is why five tools came out of one year.",af:"Des mois, avec des semaines récentes intenses. C'est le moteur partagé qui explique cinq outils en un an.",n:""},
+{c:"About me",q:"Why did you take this on yourself?",qf:"Pourquoi vous êtes lancé là-dedans vous-même ?",a:"Because I know the desk and I can build. It was faster to prove it than to wait for a project — and now I want the group behind it.",af:"Parce que je connais le desk et que je sais construire. C'était plus rapide de le prouver que d'attendre un projet — et maintenant je veux le groupe derrière.",n:""}
+
+];
+</script>
+<script>
+(function(){
+"use strict";
+var $=function(s){return document.querySelector(s);};
+var KB=window.KB||[];
+
+/* ---------- normalisation & synonymes ---------- */
+var STOP=" a an the of to in on for and or is are do does did can could would will be been it this that with at as by from your you we i my our their they them he she his her its what how why who where when which not no yes please much actually basically really just exactly about any anything something things thing lot kind sort maybe simply quite bit got there here us me also even still way stuff going gonna wanna let lets ok okay yeah hey well so then than too very le la les un une de des du au aux et ou est sont ce cette ces que qu qui quoi quel quelle comment pourquoi quand dans sur pour avec sans par vous nous je tu il elle on se sa son ses leur leurs ne pas plus votre vos notre nos ca cela ceci en avoir etre faire si mais donc car ni comme tout tous toute toutes meme aussi bien peu alors y a as ai ont ete outil outils truc machin ".split(" ");
+var STOPSET={}; STOP.forEach(function(w){if(w)STOPSET[w]=1;});
+function norm(s){
+  return (s||"").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g,"")
+    .replace(/[^a-z0-9 ]/g," ").replace(/\s+/g," ").trim();
+}
+function stem(w){ return (w.length>3 && w.charAt(w.length-1)==="s" && w.charAt(w.length-2)!=="s")? w.slice(0,-1):w; }
+function toks(s){
+  return norm(s).split(" ").filter(function(w){return w && !STOPSET[w] && w.length>1;}).map(stem);
+}
+// groupes de synonymes -> tokens canoniques ajoutés
+var SYN=[
+  ["cost price pay fee fees cheap expensive money budget free pricing","cost"],
+  ["data leave leaves leak leaked outside external export send sent privacy private secure security confidential","data security"],
+  ["powerbi power bi tableau qlik dashboard dashboards","bi powerbi"],
+  ["chart charts graph graphs visual visuals analytics reporting report","chart bi"],
+  ["server servers host hosting hosted cloud infrastructure","server host"],
+  ["owner ownership belong belongs intellectual property proprietaire propriete appartient possede","ownership"],
+  ["leave leaves left quit quits gone resign resigns departure","leave person"],
+  ["api apis integration integrate connect connected connection live realtime","api connect"],
+  ["offline internet network web online","offline online"],
+  ["noa assistant automation automate automated bot ai artificial","noa ai"],
+  ["encrypt encrypted encryption aes crypto","encrypt"],
+  ["audit trail log logs logging journal traceable traceability trace","audit"],
+  ["obfuscate obfuscated minified minify protect protected protection code source","code protect"],
+  ["rollout roll pilot deploy deployed deployment scale scaling scalable","rollout scale"],
+  ["train trained training onboard onboarding adoption adopt","training adoption"],
+  ["language languages french english multilingual","language"],
+  ["shadow","shadowit"],
+  ["gdpr compliance compliant regulation regulatory governance dlp retention","compliance"],
+  ["password passwords credential credentials login auth authentication pbkdf2","password auth"],
+  ["lock locked blockable block blocked kill switch remote disable revoke","lock remote"],
+  ["licence license licensed licensing","licence"],
+  ["renewal renewals renew","renewal"],
+  ["commission commissions","commission"],
+  ["insurer insurers atradius coface allianz credit","insurer"],
+  ["currency currencies multicurrency euro fx","currency"],
+  ["drill filter filters crossfilter slice segment","filter drill"],
+  ["support maintain maintenance maintainable bug bugs fix","support maintain"],
+  ["framework react angular vue vanilla","framework"],
+  ["mobile phone tablet ios android","mobile"],
+  ["prototype real production operational toy demo","production"],
+  ["who you background role experience built build","aboutme build"],
+  ["extension relay companion browser","extension relay"],
+  ["tender tenders ao","tenders"],
+  ["factor factoring affacturage","factor"],
+  ["bonding bond surety caution cautions","bonding"],
+  ["five 5 tools ecosystem suite","ecosystem"],
+  ["manager view consolidated team supervisor","manager"],
+  ["client clients customer insured","client"],
+  ["sharepoint onedrive microsoft m365 entra tenant","microsoft sharepoint"],
+  ["cout couts prix tarif payer gratuit budget combien","cost"],
+  ["donnee donnees fuite sortir sortent dehors externe confidentiel confidentielle securite securiser securise","data security"],
+  ["assureur assureurs atradius coface allianz","insurer"],
+  ["renouvellement renouvellements renouveler","renewal"],
+  ["licences licencie","licence"],
+  ["serveur serveurs heberge hebergement heberger","server host"],
+  ["partir part quitte quitter parti depart","leave person"],
+  ["graphique graphiques graphe tableau tableaux","chart bi"],
+  ["automatisation automatiser automatise","noa ai"],
+  ["chiffre chiffrement chiffree chiffrees aes crypto","encrypt"],
+  ["journal trace tracabilite tracable traca","audit"],
+  ["deploiement deployer echelle","rollout scale"],
+  ["formation former","training adoption"],
+  ["langue langues francais anglais","language"]
+];
+var SYNMAP={};
+SYN.forEach(function(pair){
+  var keys=pair[0].split(" "), add=pair[1].split(" ").map(stem);
+  keys.forEach(function(k){ k=stem(k); SYNMAP[k]=(SYNMAP[k]||[]).concat(add); });
+});
+function expand(tokens){
+  var out=tokens.slice();
+  tokens.forEach(function(t){ if(SYNMAP[t]) out=out.concat(SYNMAP[t]); });
+  return out;
+}
+
+/* ---------- index ---------- */
+var IDX=KB.map(function(item){
+  var qt=toks(item.q).concat(toks(item.qf||"")), at=toks(item.a).concat(toks(item.af||"")), ct=toks(item.c);
+  var qset={}; qt.forEach(function(t){qset[t]=1;});
+  var aset={}; at.forEach(function(t){aset[t]=1;});
+  var cset={}; ct.forEach(function(t){cset[t]=1;});
+  var qexp={}; expand(qt).forEach(function(t){qexp[t]=1;});
+  return {item:item,qset:qset,aset:aset,cset:cset,qexp:qexp,qnorm:norm(item.q)+" "+norm(item.qf||"")};
+});
+// détection de langue
+var FRSET={}, ENSET={};
+" le la les un une des du de au aux et est sont ce cette que qui quoi combien pourquoi comment quand dans sur pour avec sans vous nous ca cela votre vos notre nos cout prix donnees securite assureur assureurs licence quel quelle on se ne pas plus il elle ".split(" ").forEach(function(w){if(w)FRSET[w]=1;});
+" the is are do does what how why who your you this that with for cost data security insurer of to and it not can could should would when where ".split(" ").forEach(function(w){if(w)ENSET[w]=1;});
+function detectLang(q){
+  var t=norm(q).split(" "),fr=0,en=0;
+  for(var i=0;i<t.length;i++){ if(FRSET[t[i]])fr++; if(ENSET[t[i]])en++; }
+  return fr>en?"fr":"en";
+}
+
+function scoreOne(qtokExp, qbig, rec){
+  var s=0, seen={};
+  for(var i=0;i<qtokExp.length;i++){
+    var t=qtokExp[i]; if(seen[t])continue; seen[t]=1;
+    if(rec.qexp[t]) s+=3; else if(rec.qset[t]) s+=3;
+    else if(rec.aset[t]) s+=1;
+    if(rec.cset[t]) s+=2;
+  }
+  // bonus bigrammes présents dans la question
+  for(var b=0;b<qbig.length;b++){ if(rec.qnorm.indexOf(qbig[b])>=0) s+=2; }
+  return s;
+}
+function search(query){
+  var base=toks(query);
+  if(base.length===0) return [];
+  // fenêtre: derniers ~24 tokens (la vraie question est à la fin)
+  if(base.length>24) base=base.slice(base.length-24);
+  var exp=expand(base);
+  var bn=norm(query).split(" "), big=[];
+  for(var i=0;i<bn.length-1;i++){ if(STOPSET[bn[i]]&&STOPSET[bn[i+1]])continue; big.push(bn[i]+" "+bn[i+1]); }
+  var scored=[];
+  for(var k=0;k<IDX.length;k++){
+    var sc=scoreOne(exp,big,IDX[k]);
+    if(sc>0) scored.push({rec:IDX[k],s:sc});
+  }
+  scored.sort(function(a,b){return b.s-a.s;});
+  return scored.slice(0,4).map(function(x){return x.rec.item;});
+}
+
+/* ---------- état & rendu ---------- */
+var S={mode:"auto",pinned:false,lastMatches:[],lastQ:"",qlang:"en",model:"Xenova/whisper-tiny",host:"https://raw.githubusercontent.com/allouchedavy-13/whisper-model/main/",chunk:4};
+function setStatus(txt,cls){ $("#status").textContent=txt; var d=$("#dot"); d.className="dot"+(cls?(" "+cls):""); }
+
+function renderQ(text){
+  var el=$("#qtext");
+  if(!text){ el.innerHTML='<span class="cur">en attente…</span>'; var fr=$("#qlivefr"); if(fr){fr.innerHTML='<span class="cur">en attente…</span>';} lastTransSrc=""; return; }
+  el.textContent=text;
+}
+function pick(item,lang){
+  if(lang==="fr") return {q:item.qf||item.q, a:item.af||item.a, q2:item.q, a2:item.a};
+  return {q:item.q, a:item.a, q2:item.qf||item.q, a2:item.af||item.a};
+}
+function renderMatches(matches,lang){
+  lang=lang||"en";
+  var other=lang==="fr"?"EN":"FR";
+  var top=matches[0];
+  if(!top){
+    $("#amatch").innerHTML="";
+    $("#qtrans").className=""; $("#qtrans").innerHTML="";
+    $("#atext").className="empty"; $("#atext").textContent="Pas de correspondance — reformule ou tape un mot-clé.";
+    $("#atext2").className=""; $("#atext2").innerHTML="";
+    $("#anote").className=""; $("#anote").textContent="";
+    $("#alts").innerHTML="";
+    return;
+  }
+  var P=pick(top,lang);
+  $("#amatch").innerHTML='<span class="cat">'+esc(top.c)+'</span><span class="mq">'+esc(P.q)+'</span>';
+  $("#qtrans").className="show"; $("#qtrans").innerHTML='<span class="flag">'+other+'</span>'+esc(P.q2);
+  var at=$("#atext"); at.className=""; at.textContent=P.a;
+  $("#atext2").className="show"; $("#atext2").innerHTML='<span class="flag">'+other+'</span>'+esc(P.a2);
+  var note=$("#anote");
+  if(top.n){ note.className="show"; note.textContent=top.n; } else { note.className=""; note.textContent=""; }
+  var alts=matches.slice(1,4), html="";
+  for(var i=0;i<alts.length;i++){
+    var AP=pick(alts[i],lang);
+    html+='<div class="alt" data-i="'+(i+1)+'"><div class="altn">'+(i+1)+'</div><div class="altbody">'+
+      '<div class="altq">'+esc(alts[i].c)+' — '+esc(AP.q)+'</div>'+
+      '<div class="alta">'+esc(AP.a)+'</div></div></div>';
+  }
+  $("#alts").innerHTML=html;
+  Array.prototype.forEach.call(document.querySelectorAll(".alt"),function(el){
+    el.addEventListener("click",function(){ promote(parseInt(el.getAttribute("data-i"),10)); });
+  });
+}
+function esc(s){ return (s||"").replace(/[&<>]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;"}[c];}); }
+
+var deb=null;
+function setQuery(text,fromLive){
+  if(S.pinned) return;
+  S.lastQ=text;
+  renderQ(text);
+  if(deb) clearTimeout(deb);
+  deb=setTimeout(function(){
+    S.qlang=detectLang(text);
+    var m=search(text);
+    if(m.length){ S.lastMatches=m; renderMatches(m,S.qlang); }
+    if(S.mode==="auto") translateLive(text);
+    // si vide: on garde la dernière correspondance affichée (persistance)
+  }, fromLive?140:0);
+}
+function promote(i){
+  if(!S.lastMatches[i]) return;
+  var m=S.lastMatches.slice();
+  var chosen=m.splice(i,1)[0];
+  m.unshift(chosen);
+  S.lastMatches=m; renderMatches(m,S.qlang);
+}
+function togglePin(){
+  S.pinned=!S.pinned;
+  $("#abox").className=S.pinned?"pinned":"";
+  $("#pinbtn").textContent=S.pinned?"Figé ✓":"Figer";
+  $("#pinhint").textContent=S.pinned?"figé":"";
+}
+
+/* ---------- modes ---------- */
+function setMode(m){
+  S.mode=m;
+  Array.prototype.forEach.call(document.querySelectorAll("#modes button"),function(b){
+    b.className=b.getAttribute("data-mode")===m?"on":"";
+  });
+  stopAudio(); stopVoice();
+  if(m!=="auto"){ var fr=$("#qlivefr"); if(fr){fr.innerHTML='<span class="cur">en attente…</span>';} lastTransSrc=""; }
+  $("#typerow").className = (m==="type")?"show":"";
+  $("#start").className="";
+  if(m==="type"){ setStatus("Mode clavier — tape la question","live"); $("#type").focus(); }
+  else if(m==="voice"){ startVoice(); }
+  else { $("#start").className="show"; setStatus("Mode auto — prêt à écouter"); }
+}
+
+/* --- clavier --- */
+$("#type").addEventListener("input",function(){ setQuery(this.value,false); });
+
+/* --- voix (Web Speech) --- */
+var rec=null;
+function startVoice(){
+  var SR=window.SpeechRecognition||window.webkitSpeechRecognition;
+  if(!SR){ setStatus("Reconnaissance vocale indisponible — passe en Clavier","err"); return; }
+  try{
+    rec=new SR(); rec.lang="en-US"; rec.continuous=true; rec.interimResults=true;
+    rec.onresult=function(e){
+      var txt="";
+      for(var i=e.resultIndex;i<e.results.length;i++){ txt+=e.results[i][0].transcript; }
+      if(txt.trim()) setQuery(txt.trim(),true);
+    };
+    rec.onerror=function(ev){ setStatus("Voix: "+(ev.error||"erreur")+" — essaie Clavier","err"); };
+    rec.onend=function(){ if(S.mode==="voice"){ try{rec.start();}catch(e){} } };
+    rec.start();
+    setStatus("Écoute du micro — répète la question à voix basse","live");
+  }catch(e){ setStatus("Voix indisponible — passe en Clavier","err"); }
+}
+function stopVoice(){ if(rec){ try{rec.onend=null;rec.stop();}catch(e){} rec=null; } }
+
+/* --- auto (audio système + Whisper) --- */
+var actx=null,proc=null,srcNode=null,mstream=null,pend=[],pendLen=0,asr=null,busy=false,timer=null,RATE=16000,MT=1;
+function flatten(chunks,total){ var out=new Float32Array(total),off=0; for(var i=0;i<chunks.length;i++){ out.set(chunks[i],off); off+=chunks[i].length; } return out; }
+var translator=null,transBusy=false,lastTransSrc="";
+// garde la/les dernière(s) phrase(s) pour traduire court = plus rapide
+function tailSentences(t){
+  t=t.trim();
+  var parts=t.split(/(?<=[.!?])\s+/);
+  var tail=parts.slice(Math.max(0,parts.length-2)).join(" ");
+  if(tail.length>160) tail=tail.slice(tail.length-160);
+  return tail;
+}
+async function translateLive(text){
+  if(!translator||transBusy||!text) return;
+  var t=tailSentences(text);
+  if(t.replace(/[^a-z]/gi,"").length<3) return;
+  if(t===lastTransSrc) return;          // déjà traduit, on ne refait pas
+  lastTransSrc=t;
+  transBusy=true;
+  try{
+    var o=await translator(t);
+    var fr=(o&&o[0]&&(o[0].translation_text||o[0].generated_text))||"";
+    if(fr){ $("#qlivefr").textContent=fr; }
+  }catch(e){}
+  transBusy=false;
+}
+function stopAudio(){
+  if(timer){clearInterval(timer);timer=null;}
+  if(proc){try{proc.disconnect();}catch(e){}proc=null;}
+  if(srcNode){try{srcNode.disconnect();}catch(e){}srcNode=null;}
+  if(actx){try{actx.close();}catch(e){}actx=null;}
+  if(mstream){try{mstream.getTracks().forEach(function(t){t.stop();});}catch(e){}mstream=null;}
+  pend=[];pendLen=0;
+}
+async function startAudio(){
+  $("#start").className="";
+  try{
+    mstream=await navigator.mediaDevices.getDisplayMedia({video:true,audio:true});
+  }catch(e){ setStatus("Partage refusé — réessaie ou passe en Voix","err"); $("#start").className="show"; return; }
+  var atrk=mstream.getAudioTracks();
+  if(!atrk.length){ setStatus("Pas d'audio capté — coche « Partager l'audio »","err"); $("#start").className="show";
+    try{mstream.getTracks().forEach(function(t){t.stop();});}catch(e){} mstream=null; return; }
+  // on n'a pas besoin de la vidéo
+  mstream.getVideoTracks().forEach(function(t){t.stop();});
+  mstream.getAudioTracks()[0].onended=function(){ setStatus("Partage arrêté","err"); stopAudio(); $("#start").className="show"; };
+
+  try{ actx=new (window.AudioContext||window.webkitAudioContext)({sampleRate:RATE}); }
+  catch(e){ actx=new (window.AudioContext||window.webkitAudioContext)(); }
+  RATE=actx.sampleRate;
+  pend=[]; pendLen=0;
+  srcNode=actx.createMediaStreamSource(mstream);
+  proc=actx.createScriptProcessor(4096,1,1);
+  proc.onaudioprocess=function(ev){
+    var ch=ev.inputBuffer.getChannelData(0);
+    pend.push(new Float32Array(ch)); pendLen+=ch.length;
+    // plafond du retard : on jette le plus ancien au-delà de ~25 s
+    while(pendLen > RATE*25 && pend.length>1){ pendLen-=pend[0].length; pend.shift(); }
+  };
+  srcNode.connect(proc); proc.connect(actx.destination);
+
+  setStatus("Chargement du modèle Whisper…","load");
+  try{
+    var tf=await import(/* @vite-ignore */ "https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/transformers.min.js");
+    tf.env.allowLocalModels=false;
+    tf.env.backends.onnx.wasm.wasmPaths="https://cdn.jsdelivr.net/npm/@xenova/transformers@2.17.2/dist/";
+    // Multi-thread : actif seulement si la page est en contexte isolé (servie par GitHub Pages + coi-serviceworker)
+    if(self.crossOriginIsolated){
+      try{ tf.env.backends.onnx.wasm.numThreads=Math.max(2,Math.min((navigator.hardwareConcurrency||4),8)); MT=tf.env.backends.onnx.wasm.numThreads; }catch(e){}
+    } else { try{ tf.env.backends.onnx.wasm.numThreads=1; }catch(e){} MT=1; }
+    if(S.host){
+      tf.env.remoteHost=S.host.replace(/\/?$/,"/");   // base jsDelivr, slash final garanti
+      tf.env.remotePathTemplate="{model}/";            // pas de /resolve/main sur jsDelivr GitHub
+    }
+    asr=await tf.pipeline("automatic-speech-recognition",S.model,{quantized:true});
+  }catch(e){
+    setStatus("Modèle: erreur de chargement","err");
+    stopAudio();
+    $("#startMsg").innerHTML="<b>Le modèle n'a pas pu se charger.</b><br><span style='font-size:12px;color:#9AA0AD'>Détail : "+esc((e&&(e.message||e.name))||"inconnu")+"</span><br>Vérifie l'URL dans les réglages ⚙, ou réessaie. Voix et Clavier marchent sans modèle.";
+    $("#start").className="show";
+    return;
+  }
+  setStatus("Chargement du traducteur FR…","load");
+  try{ translator=await tf.pipeline("translation","Xenova/opus-mt-en-fr",{quantized:true}); }
+  catch(e){ translator=null; }
+  var mt=(MT>1)?(" · "+MT+" cœurs ⚡"):" · 1 cœur (local)";
+  setStatus((translator?"Écoute — en direct (FR activé)":"Écoute — en direct (FR indispo)")+mt,"live");
+  timer=setInterval(runASR, 1200);
+}
+// Nettoie la sortie Whisper : casse les boucles (mots/phrases répétés) et plafonne la longueur
+function cleanASR(s){
+  s=(s||"").replace(/\s+/g," ").trim();
+  var w=s.split(" ");
+  if(w.length>80) w=w.slice(w.length-80);
+  // anti-boucle : supprime toute phrase (1 à 8 mots) répétée consécutivement
+  var changed=true, guard=0;
+  while(changed && guard++<300){
+    changed=false;
+    for(var k=1;k<=8;k++){
+      var done=false;
+      for(var i=0;i+2*k<=w.length;i++){
+        var same=true;
+        for(var j=0;j<k;j++){ if((w[i+j]||"").toLowerCase()!==(w[i+k+j]||"").toLowerCase()){ same=false; break; } }
+        if(same){ w.splice(i+k,k); changed=true; done=true; break; }
+      }
+      if(done) break;
+    }
+  }
+  s=w.join(" ");
+  if(s.length>300) s=s.slice(s.length-300);
+  return s.trim();
+}
+async function runASR(){
+  if(busy||!asr||pendLen< RATE*1.2) return;
+  busy=true;
+  try{
+    // on consomme TOUT l'audio en attente, dans l'ordre (rien n'est jeté)
+    var take=pend, tlen=pendLen; pend=[]; pendLen=0;
+    var buf=flatten(take,tlen);
+    // si on est en retard, on borne l'inférence aux ~15 dernières secondes
+    var cap=Math.floor(RATE*15);
+    if(buf.length>cap) buf=buf.subarray(buf.length-cap);
+    var out=await asr(buf,{no_repeat_ngram_size:3});
+    var txt=(out&&out.text)?cleanASR(out.text):"";
+    if(txt && txt.replace(/[^a-z]/gi,"").length>2) setQuery(txt,true);
+  }catch(e){ /* on continue */ }
+  busy=false;
+}
+
+/* ---------- UI bindings ---------- */
+Array.prototype.forEach.call(document.querySelectorAll("#modes button"),function(b){
+  b.addEventListener("click",function(){ setMode(b.getAttribute("data-mode")); });
+});
+$("#pinbtn").addEventListener("click",togglePin);
+$("#gear").addEventListener("click",function(){ $("#settings").classList.toggle("show"); });
+$("#startBtn").addEventListener("click",startAudio);
+$("#skipBtn").addEventListener("click",function(){ setMode("voice"); });
+$("#setModel").addEventListener("change",function(){ S.model=this.value; });
+$("#setHost").addEventListener("input",function(){ S.host=this.value.trim(); });
+$("#setChunk").addEventListener("input",function(){ var v=parseInt(this.value,10); if(v>=3&&v<=15)S.chunk=v; });
+
+document.addEventListener("keydown",function(e){
+  if(e.target&&e.target.id==="type"){ if(e.key==="Escape"){e.target.blur();} return; }
+  if(e.key==="1"||e.key==="2"||e.key==="3"){ promote(parseInt(e.key,10)); }
+  else if(e.key==="p"||e.key==="P"){ togglePin(); }
+  else if(e.key==="Escape"){ if(S.pinned) togglePin(); }
+  else if(e.key==="/"){ e.preventDefault(); setMode("type"); }
+});
+
+// démarrage
+setStatus("Mode auto — prêt à écouter");
+$("#start").className="show";
+renderMatches([]); // état vide propre
+$("#atext").className="empty"; $("#atext").textContent="La réponse la plus proche s'affichera ici, en grand.";
+window.__search=search; // pour tests
+})();
+</script>
+</body>
+</html>
