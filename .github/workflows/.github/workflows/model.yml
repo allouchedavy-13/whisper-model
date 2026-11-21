@@ -1,0 +1,20 @@
+name: fetch-model
+on: [push, workflow_dispatch]
+permissions:
+  contents: write
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: |
+          mkdir -p Xenova/whisper-tiny/onnx
+          B=https://huggingface.co/Xenova/whisper-tiny/resolve/main
+          for f in config.json generation_config.json preprocessor_config.json tokenizer.json tokenizer_config.json; do curl -fL -o Xenova/whisper-tiny/$f $B/$f; done
+          curl -fL -o Xenova/whisper-tiny/onnx/encoder_model_quantized.onnx $B/onnx/encoder_model_quantized.onnx
+          curl -fL -o Xenova/whisper-tiny/onnx/decoder_model_merged_quantized.onnx $B/onnx/decoder_model_merged_quantized.onnx
+          git config user.name "bot"
+          git config user.email "bot@example.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "add model"
+          git push
