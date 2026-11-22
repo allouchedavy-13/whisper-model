@@ -585,6 +585,7 @@ function setMode(m){
     b.className=b.getAttribute("data-mode")===m?"on":"";
   });
   stopAudio(); stopVoice();
+  liveTxt="";
   if(m!=="auto"){ var fr=$("#qlivefr"); if(fr){fr.innerHTML='<span class="cur">en attente…</span>';} lastTransSrc=""; }
   $("#typerow").className = (m==="type")?"show":"";
   $("#start").className="";
@@ -619,6 +620,23 @@ function stopVoice(){ if(rec){ try{rec.onend=null;rec.stop();}catch(e){} rec=nul
 /* --- auto (audio système + Whisper) --- */
 var actx=null,proc=null,srcNode=null,mstream=null,pend=[],pendLen=0,asr=null,busy=false,timer=null,RATE=16000,MT=1;
 function flatten(chunks,total){ var out=new Float32Array(total),off=0; for(var i=0;i<chunks.length;i++){ out.set(chunks[i],off); off+=chunks[i].length; } return out; }
+// Transcript cumulatif : on empile chaque tranche transcrite pour construire des phrases qui restent à l'écran
+var liveTxt="";
+function appendLive(prev,seg){
+  seg=(seg||"").trim(); if(!seg) return prev;
+  if(!prev) prev=seg;
+  else{
+    // enlève le chevauchement éventuel (derniers mots de prev == premiers mots de seg)
+    var pw=prev.split(" "), sw=seg.split(" "), ov=0, max=Math.min(8,pw.length,sw.length);
+    for(var k=max;k>=1;k--){
+      if(pw.slice(pw.length-k).join(" ").toLowerCase()===sw.slice(0,k).join(" ").toLowerCase()){ ov=k; break; }
+    }
+    prev=prev+" "+sw.slice(ov).join(" ");
+  }
+  var w=prev.trim().split(" ");
+  if(w.length>60) w=w.slice(w.length-60);   // on garde les ~60 derniers mots
+  return w.join(" ");
+}
 var translator=null,transBusy=false,lastTransSrc="";
 // garde la/les dernière(s) phrase(s) pour traduire court = plus rapide
 function tailSentences(t){
@@ -648,7 +666,7 @@ function stopAudio(){
   if(srcNode){try{srcNode.disconnect();}catch(e){}srcNode=null;}
   if(actx){try{actx.close();}catch(e){}actx=null;}
   if(mstream){try{mstream.getTracks().forEach(function(t){t.stop();});}catch(e){}mstream=null;}
-  pend=[];pendLen=0;
+  pend=[];pendLen=0; liveTxt="";
 }
 async function startAudio(){
   $("#start").className="";
@@ -728,7 +746,8 @@ function cleanASR(s){
   return s.trim();
 }
 async function runASR(){
-  if(busy||!asr||pendLen< RATE*1.2) return;
+  // on attend ~4,5 s d'audio pour transcrire des tranches cohérentes (phrases, pas des bribes)
+  if(busy||!asr||pendLen< RATE*4.5) return;
   busy=true;
   try{
     // on consomme TOUT l'audio en attente, dans l'ordre (rien n'est jeté)
@@ -739,7 +758,10 @@ async function runASR(){
     if(buf.length>cap) buf=buf.subarray(buf.length-cap);
     var out=await asr(buf,{no_repeat_ngram_size:3});
     var txt=(out&&out.text)?cleanASR(out.text):"";
-    if(txt && txt.replace(/[^a-z]/gi,"").length>2) setQuery(txt,true);
+    if(txt && txt.replace(/[^a-z]/gi,"").length>2){
+      liveTxt=appendLive(liveTxt,txt);   // on empile pour construire les phrases
+      setQuery(liveTxt,true);
+    }
   }catch(e){ /* on continue */ }
   busy=false;
 }
